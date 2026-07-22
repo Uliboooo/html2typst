@@ -185,8 +185,6 @@ fn render_element(
     // --- ブロック要素 -------------------------------------------------
     "p" -> block(render_nodes(children))
 
-    // Typst は "=" が見出しレベル 1。HTML の h1 に対応させている。
-    // h2 を最上位にしたい文書なら、全体を 1 段ずらす。
     "h1" -> block("#title[" <> render_nodes(children) <> "]")
     "h2" -> block("= " <> render_nodes(children))
     "h3" -> block("== " <> render_nodes(children))
@@ -194,22 +192,33 @@ fn render_element(
     "h5" -> block("==== " <> render_nodes(children))
     "h6" -> block("===== " <> render_nodes(children))
 
-    // TODO: h3 〜 h6。上と同じ形で "=" を増やすだけ。
     // 子の li を自分で拾う。marker を変えれば ol になる。
-    "ul" -> block(render_list_items("-", children))
-    "ol" -> block(render_list_items("+", children))
+    // 空行を足す block() を被せるのはトップレベルのリストだけ。
+    // 入れ子のぶんは render_list_item が字下げして中に埋める。
+    "ul" -> block(render_list("-", children))
+    "ol" -> block(render_list("+", children))
 
-    // TODO: "ol" -> block(render_list_items("+", children))
-    // NOTE: 入れ子のリストは、内側の各行を 2 スペース字下げする必要がある。
     // TODO: "blockquote" -> Typst の #quote[...]
-    // TODO: "hr" -> "#line(length: 100%)"
+    "blockquote" ->
+      block(
+        "#quote(attribution: ["
+        <> case attribute(attributes, "cite") {
+          Ok(cite) -> cite
+          Error(_) -> "none"
+        }
+        <> "])["
+        <> render_nodes(children)
+        <> "]",
+      )
+    "hr" -> block("#line(length: 100%)")
     // TODO: "pre" -> ``` で囲む。中身は escape してはいけない
     // TODO: "table" -> #table(columns: N, ...) 列数を数える必要がある
     // --- インライン要素 -----------------------------------------------
     "strong" -> "*" <> render_nodes(children) <> "*"
 
-    // TODO: "em" -> "_" で囲む。上と同じ形
+    "em" -> "$dash.em$"
     // TODO: "code" -> "`" で囲む。中身は escape してはいけない
+    "code" -> "`" <> "`"
     // 属性を使う例。href が無いときはリンクにせず中身だけ出す。
     "a" ->
       case attribute(attributes, "href") {
@@ -223,6 +232,8 @@ fn render_element(
     // Typst の強制改行は行末のバックスラッシュ。
     "br" -> "\\\n"
 
+    "script" -> ""
+
     // --- 未知のタグ ---------------------------------------------------
     // div / span / body のような「構造だけ」のタグはここに落ちる。
     // 捨てずに中身を通すのが重要。捨てると本文が黙って消える。
@@ -231,16 +242,64 @@ fn render_element(
 }
 
 /// li だけを拾って marker を付ける。ul / ol で共用する。
-fn render_list_items(marker: String, children: List(Node)) -> String {
+/// 空行は入れない。Typst は空行でリストを終端するので、ここで入れると
+/// 入れ子が「別のリスト」に割れてしまう。
+fn render_list(marker: String, children: List(Node)) -> String {
   children
   |> list.filter_map(fn(child) {
     case child {
-      Element("li", _, li_children) ->
-        Ok(marker <> " " <> render_nodes(li_children))
+      Element("li", _, li_children) -> Ok(render_list_item(marker, li_children))
       // li 以外（要素間の空白テキストなど）は捨てる
       _ -> Error(Nil)
     }
   })
+  |> string.join("\n")
+}
+
+/// li 1 個ぶん。中身に ul / ol があれば字下げして下にぶら下げる。
+///
+/// 深さを引数で持ち回らなくていいのは、各階層が自分の子の出力に 1 回ずつ
+/// indent を掛けるから。3 階層目は 2 階層目の indent も重ねて受けるので、
+/// 勝手に 4 スペースになる。
+fn render_list_item(marker: String, li_children: List(Node)) -> String {
+  let #(nested, inline) = list.partition(li_children, is_list)
+
+  // <li><p>…</p></li> のとき render_nodes が block() の空行を返すので落とす。
+  // li の中に複数のブロックが並ぶ場合は今も崩れる。
+  let head = marker <> " " <> string.trim(render_nodes(inline))
+
+  case nested {
+    [] -> head
+    _ -> head <> "\n" <> indent(render_nested_lists(nested))
+  }
+}
+
+fn is_list(node: Node) -> Bool {
+  case node {
+    Element("ul", _, _) | Element("ol", _, _) -> True
+    _ -> False
+  }
+}
+
+/// 入れ子のリスト。render_node 経由にすると render_element が block() を
+/// 被せてしまうので、render_list を直接呼ぶ。
+fn render_nested_lists(nodes: List(Node)) -> String {
+  nodes
+  |> list.filter_map(fn(node) {
+    case node {
+      Element("ol", _, children) -> Ok(render_list("+", children))
+      Element("ul", _, children) -> Ok(render_list("-", children))
+      // is_list を通しているのでここには来ない
+      _ -> Error(Nil)
+    }
+  })
+  |> string.join("\n")
+}
+
+fn indent(text: String) -> String {
+  text
+  |> string.split("\n")
+  |> list.map(fn(l) { "  " <> l })
   |> string.join("\n")
 }
 

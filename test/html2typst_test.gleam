@@ -19,11 +19,35 @@ pub fn paragraphs_are_separated_by_a_blank_line_test() {
 }
 
 pub fn headings_test() {
-  assert html2typst.h2t("<h1>a</h1><h2>b</h2>") == "= a\n\n== b"
+  assert html2typst.h2t("<h1>a</h1><h2>b</h2>") == "#title[a]\n\n= b"
 }
 
 pub fn unordered_list_test() {
   assert html2typst.h2t("<ul><li>a</li><li>b</li></ul>") == "- a\n- b"
+}
+
+pub fn ordered_list_test() {
+  assert html2typst.h2t("<ol><li>a</li><li>b</li></ol>") == "+ a\n+ b"
+}
+
+pub fn nested_list_is_indented_test() {
+  assert html2typst.h2t("<ul><li>a<ul><li>b</li></ul></li><li>c</li></ul>")
+    == "- a\n  - b\n- c"
+}
+
+/// 字下げが階層ごとに積み上がること。depth を引数で持ち回らず、
+/// 各階層が子の出力に indent を 1 回掛けるだけで 4 スペースになる。
+pub fn deeply_nested_list_test() {
+  assert html2typst.h2t(
+      "<ul><li>a<ul><li>b<ol><li>c</li></ol></li></ul></li></ul>",
+    )
+    == "- a\n  - b\n    + c"
+}
+
+/// 入れ子のリストの中に空行が入ると Typst はそこでリストを終端してしまう。
+pub fn nested_list_has_no_blank_lines_test() {
+  assert html2typst.h2t("<ul><li><p>a</p><ul><li>b</li></ul></li></ul>")
+    == "- a\n  - b"
 }
 
 // --- インライン要素 --------------------------------------------------------
@@ -77,4 +101,8 @@ pub fn stray_end_tag_does_not_crash_test() {
 
 pub fn empty_input_test() {
   assert html2typst.h2t("") == ""
+}
+
+pub fn ignore_script_test() {
+  assert html2typst.h2t("<script>console.log(\"hello\")</script>") == ""
 }
