@@ -18,7 +18,7 @@ import html_parser
 import simplifile
 
 // ---------------------------------------------------------------------------
-// 1. 木の表現
+// Express Tree
 // ---------------------------------------------------------------------------
 
 /// html_parser.Element は「開始タグ」「終了タグ」を別々の値として持つ平坦な型。
@@ -57,7 +57,7 @@ fn is_void(tag: String) -> Bool {
 }
 
 // ---------------------------------------------------------------------------
-// 2. 平坦な列 -> 木
+// 2. flat tree -> tree
 // ---------------------------------------------------------------------------
 
 /// HTML 文字列を Node の一覧にする。
@@ -345,17 +345,6 @@ fn read(path) {
   }
 }
 
-fn get_cwd() {
-  case simplifile.current_directory() {
-    Ok(cwd) -> cwd
-    Error(error) -> {
-      io.print("Failed to get current directory: ")
-      echo error
-      "error"
-    }
-  }
-}
-
 pub fn stem(path) -> String {
   filepath.base_name(path)
   |> filepath.strip_extension
@@ -385,11 +374,6 @@ fn resolve_args() {
   }
 }
 
-fn resolve_input_files_path(f_list) {
-  f_list
-  |> list.map(fn(p) { read(p) })
-}
-
 fn write(content, path) {
   simplifile.write(contents: content, to: path)
 }
@@ -407,19 +391,10 @@ pub fn main() -> Nil {
   |> list.map(fn(read_content) { #(h2t(read_content.0), read_content.1) })
   |> list.map(fn(t) { #(resolve_custom(t.0, ["./config/config.typ"]), t.1) })
   |> list.map(fn(res) {
-    // io.println("write to " <> resolve_write_path(res.1))
     case write(res.0, resolve_write_path(res.1)) {
       Ok(_) -> io.println("write to " <> resolve_write_path(res.1))
       Error(e) -> io.print_error(string.inspect(e))
     }
   })
-  // |> list.map(fn(res) { io.println(res) })
   Nil
-  // let big_html_path = get_cwd() |> filepath.join("test.html")
-  // let big_html_content = read(big_html_path)
-
-  // let custom_path = get_cwd() |> filepath.join("config.typ")
-
-  // let res = resolve_custom(h2t(big_html_content), ["./config.typ"])
-  // io.print(res)
 }
