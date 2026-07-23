@@ -16,54 +16,6 @@ pub fn main() {
 }
 ```
 
-## Concept
-
-HTML and Typst both describe documents, but with different primitives.
-html2typst does a **structural translation**, not a visual one: it maps each
-HTML construct onto the closest Typst markup and lets Typst handle the actual
-layout and typesetting.
-
-The conversion runs in three stages:
-
-1. **Flatten** — `html_parser` turns the HTML string into a flat list of
-   start-tags, end-tags, and text.
-2. **Build a tree** — that flat list is folded back into a `Node` tree
-   (`Element` / `Text`). This stage is tag-agnostic, so it rarely needs to
-   change.
-3. **Render** — the tree is walked and each node is emitted as Typst markup.
-   This is where the actual HTML→Typst mapping lives (`render_element`).
-
-Two ideas guide the mapping:
-
-- **Never drop content.** Unknown or purely structural tags (`div`, `span`,
-  `section`, `body`, …) are *unwrapped* — their children are emitted and the
-  tag itself disappears. Text is never silently lost.
-- **Stay robust on messy HTML.** Unclosed tags, stray end tags, void elements
-  (`<br>`, `<img>`, …), and significant whitespace around tags are all handled
-  so real-world HTML doesn't crash the converter or scramble the output.
-
-Text is decoded (entities → characters), whitespace-collapsed (HTML rules),
-and escaped so that Typst-significant characters (`#`, `$`, `*`, `_`, `[`,
-`]`, …) survive as literal text instead of becoming markup.
-
-### What gets mapped
-
-| HTML | Typst |
-|------|-------|
-| `<p>` | paragraph (blank-line separated) |
-| `<h1>` | `#title[...]` |
-| `<h2>`…`<h6>` | `=`, `==`, `===`, … headings |
-| `<ul>` / `<ol>` | `-` / `+` list items |
-| `<strong>` | `*bold*` |
-| `<a href>` | `#link("...")[...]` |
-| `<br>` | line break (`\`) |
-| unknown tags | unwrapped (content kept, tag removed) |
-
-Adding a new tag means adding one arm to the `case` in `render_element` —
-see the inline `TODO`s in [`src/html2typst.gleam`](src/html2typst.gleam) for
-the ones that are stubbed out (`em`, `code`, `pre`, `blockquote`, `hr`,
-`table`, `img`, …).
-
 ## Usage as a library
 
 ```sh
@@ -138,3 +90,54 @@ nix develop
 ```
 
 Further documentation can be found at <https://hexdocs.pm/html2typst>.
+
+## Concept
+
+HTML and Typst both describe documents, but with different primitives.
+html2typst does a **structural translation**, not a visual one: it maps each
+HTML construct onto the closest Typst markup and lets Typst handle the actual
+layout and typesetting.
+
+The conversion runs in three stages:
+
+1. **Flatten** — `html_parser` turns the HTML string into a flat list of
+   start-tags, end-tags, and text.
+2. **Build a tree** — that flat list is folded back into a `Node` tree
+   (`Element` / `Text`). This stage is tag-agnostic, so it rarely needs to
+   change.
+3. **Render** — the tree is walked and each node is emitted as Typst markup.
+   This is where the actual HTML→Typst mapping lives (`render_element`).
+
+Two ideas guide the mapping:
+
+- **Never drop content.** Unknown or purely structural tags (`div`, `span`,
+  `section`, `body`, …) are *unwrapped* — their children are emitted and the
+  tag itself disappears. Text is never silently lost.
+- **Stay robust on messy HTML.** Unclosed tags, stray end tags, void elements
+  (`<br>`, `<img>`, …), and significant whitespace around tags are all handled
+  so real-world HTML doesn't crash the converter or scramble the output.
+
+Text is decoded (entities → characters), whitespace-collapsed (HTML rules),
+and escaped so that Typst-significant characters (`#`, `$`, `*`, `_`, `[`,
+`]`, …) survive as literal text instead of becoming markup.
+
+### What gets mapped
+
+| HTML | Typst |
+|------|-------|
+| `<p>` | paragraph (blank-line separated) |
+| `<h1>` | `#title[...]` |
+| `<h2>`…`<h6>` | `=`, `==`, `===`, … headings |
+| `<ul>` / `<ol>` | `-` / `+` list items |
+| `<strong>` | `*bold*` |
+| `<a href>` | `#link("...")[...]` |
+| `<br>` | line break (`\`) |
+| unknown tags | unwrapped (content kept, tag removed) |
+
+Adding a new tag means adding one arm to the `case` in `render_element` —
+see the inline `TODO`s in [`src/html2typst.gleam`](src/html2typst.gleam) for
+the ones that are stubbed out (`em`, `code`, `pre`, `blockquote`, `hr`,
+`table`, `img`, …).
+
+
+
