@@ -13,6 +13,7 @@ import argv
 import filepath
 import gleam/io
 import gleam/list
+import gleam/option
 import gleam/result
 import gleam/string
 import html_parser
@@ -296,8 +297,6 @@ fn render_element(
             n -> mul_str("`", n + 1)
           }
         }
-      echo "rawdata:"
-      echo raw
       block(bq <> lang <> "\n" <> raw <> "\n" <> bq)
     }
 
@@ -464,22 +463,92 @@ fn collapse_whitespace(text: String) -> String {
   }
 }
 
+/// tidy が行を 1 本ずつ見ていく間の状態。
+///
+/// 「今 raw ブロックの中か」を知らないと raw を守れないが、Gleam に可変変数は
+/// 無いので、状態はこの型に載せて list.fold のアキュムレータとして持ち回る。
+///
+///   fence … raw の中なら、その閉じフェンス（"```" など）。外なら None。
+///   out   … ここまでに確定した出力行。逆順で持つ（先頭への追加が O(1)）。
+type Tidy {
+  Tidy(fence: option.Option(String), out: List(String))
+}
+
 /// ブロックが入れ子になると空行が増えるので、最後にまとめて整える。
 /// 行末の空白も落とす（要素の隙間に入った空白が空行として残るため）。
+///
+/// 素朴に文字列全体へ string.replace を掛けると raw ブロックの中まで
+/// 巻き添えになる（`<pre>` のコード内の空行や行末スペースが消える）。
+/// レンダリング済みの文字列にはもう木の情報が無いので、代わりに
+/// 「行を上から読んでフェンスの開閉を数える」ことで内外を判別する。
 fn tidy(rendered: String) -> String {
   rendered
   |> string.split("\n")
-  |> list.map(string.trim_end)
+  //           init value(acc)↓       apply function
+  |> list.fold(Tidy(option.None, []), fn(tidy, string) {
+    tidy_line(tidy, string)
+  })
+  |> fn(state) { state.out }
+  // out は逆順に積んであるので戻す
+  |> list.reverse
   |> string.join("\n")
-  |> squeeze_blank_lines
+  // 文書の先頭と末尾に付いた block() 由来の空行を落とす
   |> string.trim
 }
 
-fn squeeze_blank_lines(rendered: String) -> String {
-  let squeezed = string.replace(rendered, "\n\n\n", "\n\n")
-  case squeezed == rendered {
-    True -> rendered
-    False -> squeeze_blank_lines(squeezed)
+/// 1 行ぶんの処理。state.fence の有無がそのまま「raw の中か外か」。
+fn tidy_line(state: Tidy, line: String) -> Tidy {
+  case state.fence {
+    // --- raw の内側 ---------------------------------------------------
+    // 一字一句そのまま通す。trim_end も空行潰しもしない。ここが目的。
+    option.Some(fence) ->
+      case line == fence {
+        // 閉じフェンスに一致したら raw を抜ける。
+        // 完全一致で見るのが要点。開きフェンスは「中身の最長連続 + 1 本」に
+        // 伸ばしてあるので、中身に現れるフェンス風の行より必ず長い。
+        // つまりこの比較が中身に誤爆することはない。
+        True -> Tidy(option.None, [line, ..state.out])
+        False -> Tidy(state.fence, [line, ..state.out])
+      }
+
+    // --- raw の外側 ---------------------------------------------------
+    option.None ->
+      case open_fence(line) {
+        // 開きフェンスを見つけた。次の行から raw に入る。
+        // フェンスの本数は行ごとに違いうるので、長さではなく
+        // 閉じフェンスの文字列そのものを覚えておく。
+        Ok(fence) -> Tidy(option.Some(fence), [line, ..state.out])
+
+        Error(Nil) ->
+          // 旧 squeeze_blank_lines と旧 trim_end をこの 1 パスに統合している。
+          // 別パスに分けると、そのパスがまた raw を判別できなくなるため。
+          case string.trim_end(line), state.out {
+            // 直前に出した行も空行なら、この行は捨てる。
+            // = 空行は最大 1 つ。Typst の段落区切りは空行 1 つで足りる。
+            "", ["", ..] -> state
+            trimmed, out -> Tidy(option.None, [trimmed, ..out])
+          }
+      }
+  }
+}
+
+/// 開きフェンスの行なら、対応する閉じフェンスを返す。
+///
+/// "```" や "````rust" のように後ろに言語名が付くことがあるので、
+/// 行全体ではなく先頭のバックティック連続だけを取り出す。
+/// 返り値をそのまま閉じフェンスとして == で比較できる。
+fn open_fence(line: String) -> Result(String, Nil) {
+  let backticks =
+    line
+    |> string.to_graphemes
+    |> list.take_while(fn(c) { c == "`" })
+    |> string.concat
+
+  // 3 本未満はインライン raw（`code`）や本文中のバックティックなので
+  // ブロックの開始ではない。
+  case string.length(backticks) >= 3 {
+    True -> Ok(backticks)
+    False -> Error(Nil)
   }
 }
 
