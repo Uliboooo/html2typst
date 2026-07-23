@@ -262,6 +262,7 @@ fn render_list(marker: String, children: List(Node)) -> String {
 /// indent を掛けるから。3 階層目は 2 階層目の indent も重ねて受けるので、
 /// 勝手に 4 スペースになる。
 fn render_list_item(marker: String, li_children: List(Node)) -> String {
+  // childがlistならnested, そうでないならinlineへ
   let #(nested, inline) = list.partition(li_children, is_list)
 
   // <li><p>…</p></li> のとき render_nodes が block() の空行を返すので落とす。
