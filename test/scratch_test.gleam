@@ -1,7 +1,3 @@
-import gleam/io
-import gleam/list
-import gleam/string
-
 fn multi_str(b, s, i: Int) {
   case i {
     0 -> s
@@ -17,6 +13,5 @@ fn mul_str(s, i) {
 }
 
 pub fn foo_test() {
-  mul_str("-", 100)
-  |> io.println
+  let _ = mul_str("-", 2)
 }

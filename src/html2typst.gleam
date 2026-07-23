@@ -257,7 +257,7 @@ fn render_element(
   children: List(Node),
 ) -> String {
   case tag {
-    // --- ブロック要素 -------------------------------------------------
+    // --- block element -------------------------------------------------
     "p" -> block(render_nodes(children))
 
     "h1" -> block("#title[" <> render_nodes(children) <> "]")
@@ -267,13 +267,9 @@ fn render_element(
     "h5" -> block("==== " <> render_nodes(children))
     "h6" -> block("===== " <> render_nodes(children))
 
-    // 子の li を自分で拾う。marker を変えれば ol になる。
-    // 空行を足す block() を被せるのはトップレベルのリストだけ。
-    // 入れ子のぶんは render_list_item が字下げして中に埋める。
     "ul" -> block(render_list("-", children))
     "ol" -> block(render_list("+", children))
 
-    // TODO: "blockquote" -> Typst の #quote[...]
     "blockquote" ->
       block(
         "#quote(attribution: ["
@@ -289,7 +285,6 @@ fn render_element(
     "pre" -> {
       let #(lang, body) = case pre_code(children) {
         Ok(#(attrs, code_children)) -> #(language(attrs), code_children)
-        // <pre> 直下が生テキストの場合。言語は不明。
         Error(Nil) -> #("", children)
       }
       let raw = raw_text(body)
@@ -301,11 +296,13 @@ fn render_element(
             n -> mul_str("`", n + 1)
           }
         }
-      block(bq <> lang <> "\n" <> raw_text(body) <> "\n" <> bq)
+      echo "rawdata:"
+      echo raw
+      block(bq <> lang <> "\n" <> raw <> "\n" <> bq)
     }
 
     // TODO: "table" -> #table(columns: N, ...) 列数を数える必要がある
-    // --- インライン要素 -----------------------------------------------
+    // --- inline element -----------------------------------------------
     "strong" -> "*" <> render_nodes(children) <> "*"
 
     "em" -> "_" <> render_nodes(children) <> "_"
