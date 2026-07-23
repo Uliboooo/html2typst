@@ -13,6 +13,7 @@ import argv
 import filepath
 import gleam/io
 import gleam/list
+import gleam/result
 import gleam/string
 import html_parser
 import simplifile
@@ -164,6 +165,80 @@ fn render_node(node: Node) -> String {
   }
 }
 
+/// raw ブロック用にテキストだけを取り出す。
+/// escape も collapse_whitespace も掛けず、実体参照だけ戻す。
+fn raw_text(nodes: List(Node)) -> String {
+  nodes |> list.map(raw_node) |> string.concat
+}
+
+fn raw_node(node: Node) -> String {
+  case node {
+    Text(text) -> decode_entities(text)
+    // void 要素は children が空なので、明示しないと消える
+    Element("br", _, _) -> "\n"
+    Element(_tag, _attributes, children) -> raw_text(children)
+  }
+}
+
+fn how_much_bq(in: String) -> Int {
+  let l =
+    in
+    |> string.to_graphemes
+    |> list.take_while(fn(ch) { ch == "`" })
+    |> list.length()
+  l
+}
+
+/// class="language-rust" / "lang-rust" / "highlight language-rust" に対応。
+fn language(attributes: List(html_parser.Attribute)) -> String {
+  case attribute(attributes, "class") {
+    Error(Nil) -> ""
+    Ok(class) ->
+      class
+      |> string.split(" ")
+      |> list.find_map(fn(c) {
+        case c {
+          "language-" <> lang -> Ok(lang)
+          "lang-" <> lang -> Ok(lang)
+          _ -> Error(Nil)
+        }
+      })
+      |> result.unwrap("")
+  }
+}
+
+/// <pre> の直下が実質 <code> ひとつだけか。
+/// markdown / pandoc 由来の HTML はほぼこの形になる。
+fn pre_code(
+  children: List(Node),
+) -> Result(#(List(html_parser.Attribute), List(Node)), Nil) {
+  case list.filter(children, is_meaningful) {
+    [Element("code", attrs, code_children)] -> Ok(#(attrs, code_children))
+    _ -> Error(Nil)
+  }
+}
+
+fn is_meaningful(node: Node) -> Bool {
+  case node {
+    Text(t) -> string.trim(t) != ""
+    _ -> True
+  }
+}
+
+fn multi_str(b, s, i: Int) {
+  case i {
+    0 -> s
+    n -> multi_str(b, s <> b, n - 1)
+  }
+}
+
+fn mul_str(s, i) {
+  case i <= 0 {
+    True -> ""
+    False -> multi_str(s, s, i - 1)
+  }
+}
+
 /// ここが変換表の本体。タグを増やすときはこの case に節を足す。
 ///
 /// 実装済みのものは「形」ごとに 1 つずつ選んである:
@@ -211,14 +286,30 @@ fn render_element(
         <> "]",
       )
     "hr" -> block("#line(length: 100%)")
-    // TODO: "pre" -> ``` で囲む。中身は escape してはいけない
+    "pre" -> {
+      let #(lang, body) = case pre_code(children) {
+        Ok(#(attrs, code_children)) -> #(language(attrs), code_children)
+        // <pre> 直下が生テキストの場合。言語は不明。
+        Error(Nil) -> #("", children)
+      }
+      let raw = raw_text(body)
+      let bq =
+        how_much_bq(raw)
+        |> fn(x) {
+          case x {
+            0 -> "```"
+            n -> mul_str("`", n + 1)
+          }
+        }
+      block(bq <> lang <> "\n" <> raw_text(body) <> "\n" <> bq)
+    }
+
     // TODO: "table" -> #table(columns: N, ...) 列数を数える必要がある
     // --- インライン要素 -----------------------------------------------
     "strong" -> "*" <> render_nodes(children) <> "*"
 
-    "em" -> "$dash.em$"
-    // TODO: "code" -> "`" で囲む。中身は escape してはいけない
-    "code" -> "`" <> "`"
+    "em" -> "_" <> render_nodes(children) <> "_"
+    "code" -> "`" <> raw_text(children) <> "`"
     // 属性を使う例。href が無いときはリンクにせず中身だけ出す。
     "a" ->
       case attribute(attributes, "href") {
