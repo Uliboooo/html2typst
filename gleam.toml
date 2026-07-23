@@ -14,7 +14,11 @@ version = "0.2.0"
 
 [dependencies]
 gleam_stdlib = ">= 1.0.0 and < 2.0.0"
-html_parser = ">= 1.0.1 and < 2.0.0"
+# hex の 1.0.1 は属性パーサが引用符を見ておらず、値の中の "=" や空白で
+# 属性が壊れる（href="...?a=1&b=2" が "2" になる）。
+# 修正は upstream main にマージ済みだが未リリースなので、直接そこを指す。
+# https://github.com/calvinmclean/html_parser/pull/2
+html_parser = { git = "https://github.com/calvinmclean/html_parser", ref = "30409fb54377ff171d147d7edfe567c0f9dd93e7" }
 simplifile = ">= 2.6.0 and < 3.0.0"
 filepath = ">= 1.1.2 and < 2.0.0"
 argv = ">= 1.1.0 and < 2.0.0"
