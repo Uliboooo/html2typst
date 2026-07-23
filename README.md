@@ -1,7 +1,7 @@
 # html2typst
 
-[![Package Version](https://img.shields.io/hexpm/v/html2typst)](https://hex.pm/packages/html2typst)
-[![Hex Docs](https://img.shields.io/badge/hex-docs-ffaff3)](https://hexdocs.pm/html2typst/)
+<!-- [![Package Version](https://img.shields.io/hexpm/v/html2typst)](https://hex.pm/packages/html2typst) -->
+<!-- [![Hex Docs](https://img.shields.io/badge/hex-docs-ffaff3)](https://hexdocs.pm/html2typst/) -->
 
 Convert HTML into [Typst](https://typst.app/) markup — usable as a Gleam
 library or as a small command-line tool that turns `.html` files into
